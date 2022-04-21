@@ -13,37 +13,8 @@ import time
 import os
 import copy
 
-cudnn.benchmark = True
-plt.ion()
 
-data_transforms = {
-    'train' : transforms.Compose([
-        transforms.RandomResizedCrop(224),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406],
-        [0.229, 0.224, 0.225])
-    ]),
-    'val' : transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406],
-        [0.229, 0.224, 0.225])
-    ]),
-}
-
-data_dir = 'dataset_skin40'
-image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms[x])
-    for x in ['train', 'val']}
-dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4, shuffle=True, num_workers=4)
-    for x in ['train', 'val']}
-dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
-class_names = image_datasets['train'].classes
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-def train_model(model, criterion, optimizer, scheduler, num_epochs=5):
+def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
     since = time.time()
 
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -100,17 +71,50 @@ def train_model(model, criterion, optimizer, scheduler, num_epochs=5):
     model.load_state_dict(best_model_wts)
     return model
 
-model_ft = models.resnet18(pretrained=True)
-num_ftrs = model_ft.fc.in_features
+if __name__ == '__main__':
+    cudnn.benchmark = True
+    plt.ion()
 
-model_ft.fc = nn.Linear(num_ftrs, 2)
+    data_transforms = {
+        'train' : transforms.Compose([
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406],
+            [0.229, 0.224, 0.225])
+        ]),
+        'val' : transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406],
+            [0.229, 0.224, 0.225])
+        ]),
+    }
 
-model_ft = model_ft.to(device)
+    data_dir = 'dataset_skin40'
+    image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms[x])
+        for x in ['train', 'val']}
+    dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4, shuffle=True, num_workers=4)
+        for x in ['train', 'val']}
+    dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
+    class_names = image_datasets['train'].classes
 
-criterion = nn.CrossEntropyLoss()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+    model_ft = models.resnet18(pretrained=True)
+    num_ftrs = model_ft.fc.in_features
 
-exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
+    model_ft.fc = nn.Linear(num_ftrs, 33)
 
-model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=25)
+    model_ft = model_ft.to(device)
+
+    criterion = nn.CrossEntropyLoss()
+
+    optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+
+    exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
+
+    model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=25)
+
+    torch.save(model_ft.state_dict(), 'method1')
