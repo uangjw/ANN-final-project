@@ -1,41 +1,22 @@
-''' resnet with mixup '''
+''' vitb-R50 no trick '''
 from __future__ import print_function, division
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim import lr_scheduler
-from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
 import numpy as np
 import torchvision
-from torchvision import datasets, models, transforms
+from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import time
 import os
 import copy
 
+import timm
+from timm.loss import LabelSmoothingCrossEntropy
 
-def mixup_data(x, y, alpha=1.0, use_cuda=True):
-    '''Returns mixed inputs, pairs of targets, and lambda'''
-    if alpha > 0:
-        lam = np.random.beta(alpha, alpha)
-    else:
-        lam = 1
-
-    batch_size = x.size()[0]
-    if use_cuda:
-        index = torch.randperm(batch_size).to(device)
-    else:
-        index = torch.randperm(batch_size)
-
-    mixed_x = lam * x + (1 - lam) * x[index, :]
-    y_a, y_b = y, y[index]
-    return mixed_x, y_a, y_b, lam
-
-
-def mixup_criterion(criterion, pred, y_a, y_b, lam):
-    return lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
 
 def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
     since = time.time()
@@ -64,25 +45,19 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
                 inputs = inputs.to(device)
                 labels = labels.to(device)
 
-                # mixup
-                inputs, targets_a, targets_b, lam = mixup_data(inputs, labels, 0.01, True)
-                inputs, targets_a, targets_b = map(Variable, (inputs, targets_a, targets_b))
+                optimizer.zero_grad()
 
                 with torch.set_grad_enabled(phase == 'train'):
                     outputs = model(inputs)
-                    loss = mixup_criterion(criterion, outputs, targets_a, targets_b, lam)
-                    
-                    _, predicted = torch.max(outputs.data, 1)
-                    
-                    optimizer.zero_grad()
+                    _, preds = torch.max(outputs, 1)
+                    loss = criterion(outputs, labels)
+
                     if phase == 'train':
                         loss.backward()
                         optimizer.step()
 
                 running_loss += loss.item() * inputs.size(0)
-                #running_corrects += torch.sum(preds == labels.data)
-                running_corrects += (lam * predicted.eq(targets_a.data).cpu().sum().float()
-                    + (1 - lam) * predicted.eq(targets_b.data).cpu().sum().float()) 
+                running_corrects += torch.sum(preds == labels.data)
             if phase == 'train':
                 scheduler.step()
 
@@ -109,11 +84,7 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
     return model
 
 if __name__ == '__main__':
-    file_name = "result/result-resnet18-dataaug-mixup5.txt"
-    if (os.path.isfile(file_name)):
-        os.remove(file_name)
-    #result = open("result/result-vitb-resnet501.txt", "x")
-    result = open(file_name, "x")
+    result = open("result/result.txt", "x")
     cudnn.benchmark = True
     plt.ion()
 
@@ -121,9 +92,6 @@ if __name__ == '__main__':
         'train' : transforms.Compose([
             transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(),
-            #transforms.RandomApply(transforms=[transforms.RandomAffine(degrees=(30, 70), translate=(0.1, 0.3), scale=(0.5, 0.75))], p=0.5),
-            #transforms.RandomApply(transforms=[transforms.RandomAdjustSharpness(sharpness_factor=2)], p=0.5),
-            #transforms.RandomApply(transforms=[transforms.RandomPerspective(distortion_scale=0.6, p=1.0)], p=0.5),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406],
             [0.229, 0.224, 0.225])
@@ -147,20 +115,17 @@ if __name__ == '__main__':
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model_ft = models.resnet18(pretrained=True)
-    num_ftrs = model_ft.fc.in_features
-
-    model_ft.fc = nn.Linear(num_ftrs, 40)
-
+    model_ft = timm.create_model('vit_base_resnet50_224_in21k', pretrained=True, num_classes=40)
+    
     model_ft = model_ft.to(device)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = LabelSmoothingCrossEntropy(smoothing=0.1).cuda()
 
-    optimizer_ft = optim.SGD(model_ft.parameters(), lr=0.001, momentum=0.9)
+    optimizer_ft = optim.SGD(model_ft.parameters(), momentum=0.9, nesterov=True, lr=0.01)
 
     exp_lr_scheduler = lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
-    model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler, result, num_epochs=50)
+    model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler, result, num_epochs=200)
 
     # torch.save(model_ft.state_dict(), 'method1/model.pth')
     

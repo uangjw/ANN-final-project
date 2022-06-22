@@ -1,19 +1,19 @@
 import matplotlib.pyplot as plt
 
-epochs = list(range(0, 50))
+epochs = list(range(0, 200))
 train_loss = []
 val_loss = []
 train_acc = []
 val_acc = []
-file = open('method1_result/fold5.txt')
-i = 1
+file = open('result/result-vitb1-200epoch-mixup.txt')
+i = 0
 for line in file:
-    if i % 3 == 1:  # train loss & acc
-        train_loss.append(float(line[0:6]))
-        train_acc.append(float(line[8:14]))
-    elif i % 3 == 2:    # val loss & acc
-        val_loss.append(float(line[0:6]))
-        val_acc.append(float(line[8:14]))
+    if i % 4 == 2:  # train loss & acc
+        train_loss.append(float(line[12:18]))
+        train_acc.append(float(line[24:30]))
+    elif i % 4 == 3:    # val loss & acc
+        val_loss.append(float(line[10:16]))
+        val_acc.append(float(line[22:28]))
     i += 1
 file.close()
 

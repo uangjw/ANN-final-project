@@ -2,10 +2,10 @@ import os
 import shutil
 
 data_path = r'dataset_skin40/train'
-train_path = r'dataset_skin40/fold/train'
-val_path = r'dataset_skin40/fold/val'
+train_path = r'dataset_skin40/fold5/train'
+val_path = r'dataset_skin40/fold5/val'
 
-val_range = list(range(0, 12))
+val_range = list(range(48, 60))
 
 if os.path.exists(data_path):
     dirs = os.listdir(data_path)
