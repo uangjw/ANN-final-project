@@ -5,7 +5,7 @@ train_loss = []
 val_loss = []
 train_acc = []
 val_acc = []
-file = open('result/result-vitb1-200epoch-mixup.txt')
+file = open('vit-result/vitb-resnet-200epoch-adam2.txt')
 i = 0
 for line in file:
     if i % 4 == 2:  # train loss & acc
@@ -29,6 +29,6 @@ plt.plot(epochs, train_acc, label="train")
 plt.plot(epochs, val_acc, label="val")
 plt.xlabel("epochs")
 plt.ylabel("accuracy")
-plt.ylim((0.0, 0.8))
+plt.ylim((0.0, 0.95))
 plt.legend()
 plt.show()

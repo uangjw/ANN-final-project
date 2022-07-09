@@ -63,6 +63,10 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
+    
+    
+    class_total_cnt = {}
+    class_correct_cnt = {}
 
     for epoch in range(num_epochs):
         print(f'Epoch {epoch}/{num_epochs - 1}')
@@ -80,6 +84,7 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
 
             running_loss = 0.0
             running_corrects = 0
+            class_corrects = {}
 
             for inputs, labels in dataloaders[phase]:
                 inputs = inputs.to(device)
@@ -104,6 +109,33 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
                 #running_corrects += torch.sum(preds == labels.data)
                 running_corrects += (lam * predicted.eq(targets_a.data).cpu().sum().float()
                     + (1 - lam) * predicted.eq(targets_b.data).cpu().sum().float()) 
+                    
+                i = 0
+                for label in targets_a.data:
+                    if label.item() in class_total_cnt.keys():
+                        class_total_cnt[label.item()] += 1
+                    else:
+                        class_total_cnt[label.item()] = 1
+                    if predicted[i] == label:
+                        if label.item() in class_correct_cnt.keys():
+                            class_correct_cnt[label.item()] += 1
+                        else :
+                            class_correct_cnt[label.item()] = 1
+                    i += 1
+                    
+                i = 0
+                for label in targets_b.data:
+                    if label.item() in class_total_cnt.keys():
+                        class_total_cnt[label.item()] += 1
+                    else:
+                        class_total_cnt[label.item()] = 1
+                    if predicted[i] == label:
+                        if label.item() in class_correct_cnt.keys():
+                            class_correct_cnt[label.item()] += 1
+                        else :
+                            class_correct_cnt[label.item()] = 1
+                    i += 1
+                    
             if phase == 'train':
                 scheduler.step(epoch+1)
 
@@ -112,6 +144,7 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
 
             print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
             result.write(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}\n')
+            
 
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
@@ -125,12 +158,19 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
     
     result.write(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s\n')
     result.write(f'Best val Acc: {best_acc:4f}\n')
+    
+    print(f'Class Acc:')
+    result.write('Class Acc:')
+    for i in range(len(class_total_cnt)):
+        acc = class_correct_cnt[i] / class_total_cnt[i]
+        print('class id: '+str(i)+"; acc: "+str(acc))
+        result.write('class id: '+str(i)+"; acc: "+str(acc))
 
     model.load_state_dict(best_model_wts)
     return model
 
 if __name__ == '__main__':
-    file_name = "vit-result/result-vitbresnet-200epoch-mixup.txt"
+    file_name = "vit-result/result-vitb-200epoch-fold1-mixup.txt"
     if (os.path.isfile(file_name)):
         os.remove(file_name)
     #result = open("result/result-vitb-resnet501.txt", "x")
@@ -165,10 +205,10 @@ if __name__ == '__main__':
     dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
     class_names = image_datasets['train'].classes
 
-    device = torch.device("cuda:5" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model_ft = timm.create_model('vit_base_resnet50_224_in21k', pretrained=True, num_classes=40)
-    #model_ft = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes=40)
+    #model_ft = timm.create_model('vit_base_resnet50_224_in21k', pretrained=True, num_classes=40)
+    model_ft = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes=40)
     
     model_ft = model_ft.to(device)
 

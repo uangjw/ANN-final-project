@@ -23,6 +23,8 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
+    
+    class_lowest_acc = {}
 
     for epoch in range(num_epochs):
         print(f'Epoch {epoch}/{num_epochs - 1}')
@@ -40,6 +42,7 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
 
             running_loss = 0.0
             running_corrects = 0
+            class_corrects = {}
 
             for inputs, labels in dataloaders[phase]:
                 inputs = inputs.to(device)
@@ -58,14 +61,47 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
 
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
+                
+                i = 0
+                for label in labels.data:
+                    if preds[i] == label:
+                        if label.item() in class_corrects.keys():
+                            class_corrects[label.item()] += 1
+                        else :
+                            class_corrects[label.item()] = 1
+                    i += 1
             if phase == 'train':
                 scheduler.step()
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
+            
+            epoch_class_acc = {}
+            lowest_class = 0
+            lowest_class_acc = 1
+            for key in class_corrects.keys():
+                if phase == 'train':
+                    epoch_class_acc[key] = class_corrects[key] / 48
+                    # print("class:" + str(key) + ", acc:" + str(epoch_class_acc[key]))
+                    if epoch_class_acc[key] < lowest_class_acc:
+                        lowest_class = key
+                        lowest_class_acc = epoch_class_acc[key]
+                else:
+                    epoch_class_acc[key] = class_corrects[key] / 12
+                    # print("class:" + str(key) + ", acc:" + str(epoch_class_acc[key]))
+                    if epoch_class_acc[key] < lowest_class_acc:
+                        lowest_class = key
+                        lowest_class_acc = epoch_class_acc[key]
 
             print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
             result.write(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}\n')
+            
+            epoch_class_acc_sorted = sorted(epoch_class_acc.items(), key=lambda d:d[1], reverse=False)
+            print(epoch_class_acc_sorted)
+            print("class with lowest acc:" + str(lowest_class))
+            print("lowest acc:" + str(lowest_class_acc))
+            
+            class_lowest_acc [lowest_class] = lowest_class_acc
 
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
@@ -79,12 +115,14 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
     
     result.write(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s\n')
     result.write(f'Best val Acc: {best_acc:4f}\n')
+    
+    print(class_lowest_acc)
 
     model.load_state_dict(best_model_wts)
     return model
 
 if __name__ == '__main__':
-    result = open("result/result.txt", "x")
+    result = open("vit-result/no-trick-result.txt", "x")
     cudnn.benchmark = True
     plt.ion()
 
@@ -115,7 +153,8 @@ if __name__ == '__main__':
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model_ft = timm.create_model('vit_base_resnet50_224_in21k', pretrained=True, num_classes=40)
+    #model_ft = timm.create_model('vit_base_resnet50_224_in21k', pretrained=True, num_classes=40)
+    model_ft = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes=40)
     
     model_ft = model_ft.to(device)
 

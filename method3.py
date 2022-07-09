@@ -1,4 +1,4 @@
-''' vitb-R50 / vitb no trick '''
+''' vitb-R50 / vitb with trick '''
 from __future__ import print_function, division
 
 import torch
@@ -39,6 +39,9 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
 
     best_model_wts = copy.deepcopy(model.state_dict())
     best_acc = 0.0
+    
+    class_total_cnt = {}
+    class_correct_cnt = {}
 
     for epoch in range(num_epochs):
         print(f'Epoch {epoch}/{num_epochs - 1}')
@@ -74,33 +77,61 @@ def train_model(model, criterion, optimizer, scheduler, result, num_epochs=25):
 
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += torch.sum(preds == labels.data)
+                
+                i = 0
+                for label in labels.data:
+                    if label.item() in class_total_cnt.keys():
+                        class_total_cnt[label.item()] += 1
+                    else:
+                        class_total_cnt[label.item()] = 1
+                    if preds[i] == label:
+                        if label.item() in class_correct_cnt.keys():
+                            class_correct_cnt[label.item()] += 1
+                        else :
+                            class_correct_cnt[label.item()] = 1
+                    i += 1
+                
             if phase == 'train':
                 scheduler.step(epoch+1)
 
             epoch_loss = running_loss / dataset_sizes[phase]
             epoch_acc = running_corrects.double() / dataset_sizes[phase]
+            
 
             print(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
             result.write(f'{phase} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}\n')
+            
 
             if phase == 'val' and epoch_acc > best_acc:
                 best_acc = epoch_acc
                 best_model_wts = copy.deepcopy(model.state_dict())
         
         print()
-    
+        
     time_elapsed = time.time() - since
     print(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
     print(f'Best val Acc: {best_acc:4f}')
     
     result.write(f'Training complete in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s\n')
     result.write(f'Best val Acc: {best_acc:4f}\n')
+    
+    print(f'Class Acc:')
+    result.write('Class Acc:')
+    for i in range(len(class_total_cnt)):
+        acc = class_correct_cnt[i] / class_total_cnt[i]
+        print('class id: '+str(i)+"; acc: "+str(acc))
+        result.write('class id: '+str(i)+"; acc: "+str(acc))
+    
+
 
     model.load_state_dict(best_model_wts)
     return model
 
 if __name__ == '__main__':
-    result = open("result/vitb-resnet-200epoch-trick.txt", "x")
+    file_name = "vit-result/vitb-200epoch-trick-fold3.txt"
+    if (os.path.isfile(file_name)):
+        os.remove(file_name)
+    result = open(file_name, "x")
     cudnn.benchmark = True
     plt.ion()
 
@@ -108,6 +139,7 @@ if __name__ == '__main__':
         'train' : transforms.Compose([
             transforms.RandomResizedCrop(224),
             transforms.RandomHorizontalFlip(),
+            #transforms.RandomApply(transforms=[transforms.RandomAffine(degrees=(5, 15), translate=(0.1, 0.2), scale=(0.8, 0.95))], p=0.5),
             transforms.ToTensor(),
             transforms.Normalize([0.485, 0.456, 0.406],
             [0.229, 0.224, 0.225])
@@ -121,7 +153,7 @@ if __name__ == '__main__':
         ]),
     }
 
-    data_dir = 'dataset_skin40/fold1'
+    data_dir = 'dataset_skin40/fold3'
     image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms[x])
         for x in ['train', 'val']}
     dataloaders = {x: torch.utils.data.DataLoader(image_datasets[x], batch_size=4, shuffle=True, num_workers=4)
@@ -131,8 +163,8 @@ if __name__ == '__main__':
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    #model_ft = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes=40)
-    model_ft = timm.create_model('vit_base_resnet50_224_in21k', pretrained=True, num_classes=40)
+    model_ft = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes=40)
+    #model_ft = timm.create_model('vit_base_resnet50_224_in21k', pretrained=True, num_classes=40)
     
     model_ft = model_ft.to(device)
 
@@ -143,7 +175,7 @@ if __name__ == '__main__':
     if hasattr(model_ft, 'no_weight_decay'):
         skip = model_ft.no_weight_decay()
     parameters = add_weight_decay(model_ft, 0.0001, skip)
-    weight_decay = 0.
+    weight_decay = 0.1
 
     optimizer_ft = optim.SGD(parameters, momentum=0.9, nesterov=True, lr=0.01, weight_decay=weight_decay)    
 
